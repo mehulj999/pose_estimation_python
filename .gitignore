@@ -1,0 +1,72 @@
+# Python
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.db
+*.sqlite3
+
+# Virtual Environment
+venv/
+env/
+.venv/
+env.bak/
+
+# FastAPI specific
+*.log
+instance/
+*.swp
+*.swo
+
+# Database
+*.sqlite
+*.sqlite3
+
+# IDE-specific
+.vscode/
+.idea/
+*.iml
+
+# Pytest
+*.coveragerc
+coverage.xml
+*.hypothesis/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# Docker
+Dockerfile
+docker-compose.yml
+*.dockerfile
+
+# FastAPI Migrations
+migrations/
+
+# VSCode settings
+.vscode/
+
+# Python egg and distribution files
+*.egg
+*.egg-info
+dist/
+build/
+*.tar.gz
+
+# Sphinx documentation
+docs/_build/
+
+# Testing temporary files
+pytest_cache/
+.tox/
+.nox/
+.coverage
+nosetests.xml
+coverage.xml
+*.hypothesis/
+
+# MacOS-specific
+.DS_Store
+
+# Windows-specific
+Thumbs.db
