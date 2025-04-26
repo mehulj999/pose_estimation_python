@@ -1,17 +1,14 @@
-# main.py
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
-import uvicorn
-import cv2
-import numpy as np
-import mediapipe as mp
-import tempfile
+import threading
 import os
+import signal
+from app.detector import bicep_curl_tracker, get_stats, stop_tracker
 
 app = FastAPI()
 
-# Enable CORS if Android client has origin restrictions
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,16 +16,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(static_image_mode=True)
-mp_drawing = mp.solutions.drawing_utils
-
 @app.get("/")
 def root():
     return {"message": "Pose detection API is running."}
 
-@app.post("/detect_pose/")
-async def detect_pose(file: UploadFile = File(...)):
-    # Save uploaded image temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-        contents = await file
+@app.get("/stats")
+def read_stats():
+    stats = get_stats()
+    print(f"Returning stats: Reps={stats['reps']}, Direction={stats['direction']}")  # Debugging
+    return JSONResponse(content=stats)
+
+@app.get("/shutdown")
+def shutdown():
+    stop_tracker()
+    print("🛑 Shutting down the application...")
+    os.kill(os.getpid(), signal.SIGINT)
+
+@app.on_event("startup")
+def start_background_tracker():
+    thread = threading.Thread(target=bicep_curl_tracker, daemon=True)
+    thread.start()
