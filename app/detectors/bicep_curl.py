@@ -1,34 +1,12 @@
 import cv2
 import time
+import numpy as np
 import threading
 from mediapipe import solutions
-from app.utils import calculate_angle, draw_landmarks_on_image, open_camera
+from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera
 
-# Shared state
-rep_count = 0
-direction = None  # 'up' or 'down'
-running = True  # Camera and tracker state
-lock = threading.Lock()
-
-def stop_tracker():
-    """Stop the tracker gracefully."""
-    global running
-    running = False
-
-def get_stats():
-    """Return current stats with thread safety."""
-    with lock:
-        return {"reps": rep_count, "direction": direction}
-
-def is_landmark_visible(landmark, confidence_threshold=0.3):
-    """Check if landmark is visible enough to be reliable."""
-    # Lower threshold to be more lenient with visibility
-    return landmark.visibility > confidence_threshold if hasattr(landmark, 'visibility') else True
-
-def bicep_curl_tracker():
+def bicep_curl_tracker(running, stats):
     """Background function to track bicep curls using live camera."""
-    global rep_count, direction, running
-
     # Initialize MediaPipe Pose
     mp_pose = solutions.pose
     pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
@@ -77,13 +55,6 @@ def bicep_curl_tracker():
                 elbow_idx < len(landmarks) and 
                 wrist_idx < len(landmarks)):
                 
-                # # For debugging - print landmarks visibility
-
-                # print(f"Right Shoulder visibility: {landmarks[shoulder_idx].visibility if hasattr(landmarks[shoulder_idx], 'visibility') else 'N/A'}")
-                # print(f"Right Elbow visibility: {landmarks[elbow_idx].visibility if hasattr(landmarks[elbow_idx], 'visibility') else 'N/A'}")
-                # print(f"Right Wrist visibility: {landmarks[wrist_idx].visibility if hasattr(landmarks[wrist_idx], 'visibility') else 'N/A'}")
-                
-                # Attempt to track regardless of visibility scores initially
                 valid_frames_count += 1
                 
                 if valid_frames_count >= REQUIRED_VALID_FRAMES:
@@ -99,49 +70,44 @@ def bicep_curl_tracker():
                     # Calculate angle for right arm
                     right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
                     
-                    # Print angle for debugging
-                    print(f"Right arm angle: {right_angle}")
-
-                    # Draw visual indicators for points used in angle calculation
-                    cv2.circle(frame, right_shoulder, 10, (0, 255, 0), -1)  # Green for shoulder
-                    cv2.circle(frame, right_elbow, 10, (255, 0, 0), -1)     # Blue for elbow
-                    cv2.circle(frame, right_wrist, 10, (0, 0, 255), -1)     # Red for wrist
+                    # Update stats
+                    stats["last_angle"] = right_angle
+                    stats["status"] = "tracking"
 
                     # Bicep curl logic for right arm
-                    with lock:
-                        if right_angle < 90:  # Adjusted threshold for more lenient detection
-                            if direction != 'up':
-                                rep_count += 1
-                                direction = 'up'
-                                status_text = "Up position detected"
-                        elif right_angle > 130:  # Adjusted threshold for more lenient detection
-                            if direction == 'up':
-                                direction = 'down'
-                                status_text = "Down position detected"
-                        else:
-                            status_text = f"Moving... Angle: {int(right_angle)}"
+                    if right_angle < 90:  # Adjusted threshold for more lenient detection
+                        if stats["direction"] != 'up':
+                            stats["reps"] += 1
+                            stats["direction"] = 'up'
+                            status_text = "Up position detected"
+                    elif right_angle > 130:  # Adjusted threshold for more lenient detection
+                        if stats["direction"] == 'up':
+                            stats["direction"] = 'down'
+                            status_text = "Down position detected"
+                    else:
+                        status_text = f"Moving... Angle: {int(right_angle)}"
 
                     # Draw visuals
                     cv2.putText(frame, f"Angle: {int(right_angle)}", right_elbow,
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
                 else:
                     status_text = f"Stabilizing... ({valid_frames_count}/{REQUIRED_VALID_FRAMES})"
+                    stats["status"] = "stabilizing"
             else:
-                # Reset stability counter if key landmarks aren't available
                 valid_frames_count = 0
                 status_text = "Landmarks not found"
+                stats["status"] = "waiting"
         else:
-            # Reset stability counter if no pose detected
             valid_frames_count = 0
+            stats["status"] = "waiting"
 
         # Draw status box (enlarged for more info)
         cv2.rectangle(frame, (10, 10), (400, 80), (0, 0, 0), -1)
 
-        with lock:
-            cv2.putText(frame, f"RIGHT ARM | Curls: {rep_count}", (20, 40),
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-            cv2.putText(frame, status_text, (20, 70),
-                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(frame, f"RIGHT ARM | Curls: {stats['reps']}", (20, 40),
+                  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        cv2.putText(frame, status_text, (20, 70),
+                  cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
 
         # Annotate image with pose landmarks
         annotated_image = draw_landmarks_on_image(rgb_frame, results)
