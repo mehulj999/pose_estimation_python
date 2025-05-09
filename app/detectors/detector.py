@@ -3,11 +3,17 @@ import time
 import threading
 from mediapipe import solutions
 from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera, is_landmark_visible
-from app.detectors.bicep_curl import bicep_curl_tracker
+from app.detectors.right_arm_bicep_curl import right_arm_bicep_curl_tracker
 
 # Shared state
 stats = {
-    "bicep_curl": {
+    "right_arm_bicep_curl": {
+        "reps": 0,
+        "direction": None,
+        "last_angle": None,
+        "status": "waiting"
+    },
+    "left_arm_bicep_curl": {
         "reps": 0,
         "direction": None,
         "last_angle": None,
@@ -19,9 +25,12 @@ lock = threading.Lock()
 
 def choose_exercise(exercise_name):
     """Choose the exercise to track."""
-    if exercise_name == "bicep_curl":
-        global running
-        return bicep_curl_tracker(running=running, stats=stats["bicep_curl"])
+    global running
+    if exercise_name == "right_arm_bicep_curl":
+        return right_arm_bicep_curl_tracker(running=running, stats=stats["right_arm_bicep_curl"])
+    elif exercise_name == "left_arm_bicep_curl":
+        from app.detectors.left_arm_bicep_curl import left_arm_bicep_curl_tracker
+        return left_arm_bicep_curl_tracker(running=running, stats=stats["left_arm_bicep_curl"])
     else:
         raise ValueError(f"Exercise '{exercise_name}' not supported.")
     
@@ -39,9 +48,14 @@ def get_stats(exercise_name=None):
             return None
         return stats
 
-def get_bicep_curl_stats():
-    """Get bicep curl specific stats."""
+def get_right_arm_bicep_curl_stats():
+    """Get right arm bicep curl specific stats."""
     with lock:
-        return stats["bicep_curl"]
+        return stats["right_arm_bicep_curl"]
 
-# choose_exercise("bicep_curl")  # Example usage, replace with actual exercise name
+def get_left_arm_bicep_curl_stats():
+    """Get left arm bicep curl specific stats."""
+    with lock:
+        return stats["left_arm_bicep_curl"]
+
+# choose_exercise("left_arm_bicep_curl")  # Example usage, replace with actual exercise name

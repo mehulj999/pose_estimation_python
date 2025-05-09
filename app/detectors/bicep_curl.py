@@ -5,8 +5,8 @@ import threading
 from mediapipe import solutions
 from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera, is_landmark_visible
 
-def bicep_curl_tracker(running, stats):
-    """Background function to track bicep curls using live camera."""
+def right_arm_bicep_curl_tracker(running, stats):
+    """Background function to track right arm bicep curls using live camera."""
     # Initialize MediaPipe Pose
     mp_pose = solutions.pose
     pose = mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
