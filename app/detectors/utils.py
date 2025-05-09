@@ -38,3 +38,7 @@ def open_camera(index=0, retries=5, delay=1.0):
         print(f"❌ Camera open attempt {i+1}/{retries} failed. Retrying...")
         time.sleep(delay)
     return None
+
+def is_landmark_visible(landmark, confidence_threshold=0.3):
+    """Check if landmark is visible enough to be reliable."""
+    return landmark.visibility > confidence_threshold if hasattr(landmark, 'visibility') else True
