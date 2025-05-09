@@ -2,7 +2,7 @@ import cv2
 import time
 import threading
 from mediapipe import solutions
-from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera
+from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera, is_landmark_visible
 from app.detectors.bicep_curl import bicep_curl_tracker
 
 # Shared state
@@ -43,9 +43,5 @@ def get_bicep_curl_stats():
     """Get bicep curl specific stats."""
     with lock:
         return stats["bicep_curl"]
-
-def is_landmark_visible(landmark, confidence_threshold=0.3):
-    """Check if landmark is visible enough to be reliable."""
-    return landmark.visibility > confidence_threshold if hasattr(landmark, 'visibility') else True
 
 # choose_exercise("bicep_curl")  # Example usage, replace with actual exercise name

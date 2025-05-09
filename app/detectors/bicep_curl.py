@@ -3,7 +3,7 @@ import time
 import numpy as np
 import threading
 from mediapipe import solutions
-from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera
+from app.detectors.utils import calculate_angle, draw_landmarks_on_image, open_camera, is_landmark_visible
 
 def bicep_curl_tracker(running, stats):
     """Background function to track bicep curls using live camera."""
@@ -23,6 +23,11 @@ def bicep_curl_tracker(running, stats):
     # Variables for stability tracking
     valid_frames_count = 0
     REQUIRED_VALID_FRAMES = 2  # Require consecutive valid frames before counting reps
+    REQUIRED_VISIBLE_FRAMES = 3  # Require consecutive frames with all landmarks visible
+    REQUIRED_FACE_VISIBLE_FRAMES = 3  # Require consecutive frames with face visible
+    visible_frames_count = 0
+    face_visible_frames_count = 0
+    ready_to_count = False
     tracking_active = False
     status_text = "Waiting for pose..."
 
@@ -40,6 +45,8 @@ def bicep_curl_tracker(running, stats):
         # Default status if no pose is detected
         status_text = "Waiting for pose..."
         tracking_active = False
+        all_visible = False
+        face_visible = False
 
         if results.pose_landmarks:
             landmarks = results.pose_landmarks.landmark
@@ -49,15 +56,38 @@ def bicep_curl_tracker(running, stats):
             shoulder_idx = mp_pose.PoseLandmark.RIGHT_SHOULDER.value
             elbow_idx = mp_pose.PoseLandmark.RIGHT_ELBOW.value
             wrist_idx = mp_pose.PoseLandmark.RIGHT_WRIST.value
+            nose_idx = mp_pose.PoseLandmark.NOSE.value
             
             # Check if landmarks exist in the detected pose
             if (shoulder_idx < len(landmarks) and 
                 elbow_idx < len(landmarks) and 
-                wrist_idx < len(landmarks)):
-                
+                wrist_idx < len(landmarks) and
+                nose_idx < len(landmarks)):
+                # Check visibility of all three arm landmarks
+                if (is_landmark_visible(landmarks[shoulder_idx]) and
+                    is_landmark_visible(landmarks[elbow_idx]) and
+                    is_landmark_visible(landmarks[wrist_idx])):
+                    visible_frames_count += 1
+                    all_visible = True
+                else:
+                    visible_frames_count = 0
+                    ready_to_count = False
+                # Check visibility of face (nose)
+                if is_landmark_visible(landmarks[nose_idx]):
+                    face_visible_frames_count += 1
+                    face_visible = True
+                else:
+                    face_visible_frames_count = 0
+                    ready_to_count = False
+
+                if visible_frames_count >= REQUIRED_VISIBLE_FRAMES and face_visible_frames_count >= REQUIRED_FACE_VISIBLE_FRAMES:
+                    ready_to_count = True
+                else:
+                    ready_to_count = False
+
                 valid_frames_count += 1
                 
-                if valid_frames_count >= REQUIRED_VALID_FRAMES:
+                if valid_frames_count >= REQUIRED_VALID_FRAMES and ready_to_count:
                     tracking_active = True
                     
                     def get_point(index):
@@ -74,31 +104,46 @@ def bicep_curl_tracker(running, stats):
                     stats["last_angle"] = right_angle
                     stats["status"] = "tracking"
 
-                    # Bicep curl logic for right arm
-                    if right_angle < 90:  # Adjusted threshold for more lenient detection
-                        if stats["direction"] != 'up':
+                    # Improved bicep curl logic for right arm
+                    # Only count a rep when going from down (angle > 130) to up (angle < 90)
+                    if right_angle > 130:
+                        stats["direction"] = "down"
+                        status_text = "Down position detected"
+                    elif right_angle < 90:
+                        if stats["direction"] == "down":
                             stats["reps"] += 1
-                            stats["direction"] = 'up'
+                            stats["direction"] = "up"
+                            status_text = "Up position detected (Rep counted)"
+                        else:
+                            stats["direction"] = "up"
                             status_text = "Up position detected"
-                    elif right_angle > 130:  # Adjusted threshold for more lenient detection
-                        if stats["direction"] == 'up':
-                            stats["direction"] = 'down'
-                            status_text = "Down position detected"
                     else:
                         status_text = f"Moving... Angle: {int(right_angle)}"
 
                     # Draw visuals
                     cv2.putText(frame, f"Angle: {int(right_angle)}", right_elbow,
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 51), 2)
+                elif not ready_to_count:
+                    if not face_visible:
+                        status_text = "Show your face to start counting reps."
+                    else:
+                        status_text = "Show your full arm and hand to start counting reps."
+                    stats["status"] = "not_ready"
                 else:
                     status_text = f"Stabilizing... ({valid_frames_count}/{REQUIRED_VALID_FRAMES})"
                     stats["status"] = "stabilizing"
             else:
                 valid_frames_count = 0
+                visible_frames_count = 0
+                face_visible_frames_count = 0
+                ready_to_count = False
                 status_text = "Landmarks not found"
                 stats["status"] = "waiting"
         else:
             valid_frames_count = 0
+            visible_frames_count = 0
+            face_visible_frames_count = 0
+            ready_to_count = False
             stats["status"] = "waiting"
 
         # Draw status box (enlarged for more info)
